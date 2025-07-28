@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #street-view {
+      height: 100%;
+      width: 100%;
+    }
+    #error-message {
+      display: none;
+      color: red;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div id="street-view"></div>
+  <div id="error-message"></div>
+
+  <script>
+    function showError(message) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.style.display = 'block';
+      errorDiv.textContent = message;
+      document.getElementById('street-view').style.display = 'none';
+    }
+
+    function getQueryParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        lat: parseFloat(params.get('lat')),
+        lng: parseFloat(params.get('lng')),
+        key: params.get('key')
+      };
+    }
+
+    function initStreetView() {
+      try {
+        const { lat, lng } = getQueryParams();
+        if (isNaN(lat) || isNaN(lng)) {
+          showError('Invalid latitude or longitude');
+          return;
+        }
+
+        const position = { lat, lng };
+        if (!google || !google.maps || !google.maps.StreetViewPanorama) {
+          showError('Google Maps API failed to load');
+          return;
+        }
+
+        const panorama = new google.maps.StreetViewPanorama(
+          document.getElementById("street-view"),
+          {
+            position: position,
+            pov: { heading: 210, pitch: 10 },
+            visible: true,
+            addressControl: false,
+            linksControl: true,
+            panControl: false,
+            zoomControl: false,
+            fullscreenControl: false,
+            motionTracking: false,
+            motionTrackingControl: false,
+            showRoadLabels: false
+          }
+        );
+
+        panorama.addListener("position_changed", () => {
+          const pos = panorama.getPosition();
+          if (pos && typeof pos.lat === 'function' && typeof pos.lng === 'function') {
+            const message = JSON.stringify({
+              lat: pos.lat().toFixed(6),
+              lng: pos.lng().toFixed(6)
+            });
+            console.log("JS Position Changed:", message);
+            if (window.flutter_inappwebview && typeof window.flutter_inappwebview.callHandler === 'function') {
+              window.flutter_inappwebview.callHandler('positionHandler', message);
+            }
+          }
+        });
+
+      } catch (error) {
+        showError("Error initializing Street View: " + error.message);
+      }
+    }
+
+    (function injectMapsScript() {
+      const { key } = getQueryParams();
+      if (!key) {
+        showError('API key missing in query');
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=initStreetView`;
+      script.async = true;
+      script.defer = true;
+      script.onerror = () => showError('Failed to load Google Maps API');
+      document.head.appendChild(script);
+    })();
+  </script>
+</body>
+</html>
